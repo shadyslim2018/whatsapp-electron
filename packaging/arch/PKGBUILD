@@ -1,13 +1,13 @@
-# Maintainer: Your Name <you@email.com>
+# Maintainer: AK <you@example.com>
 pkgname=whatsapp-electron
 pkgver=1.0.0
 pkgrel=1
 pkgdesc="Unofficial WhatsApp Web desktop wrapper (Electron) – runs with system Electron"
 arch=('x86_64')
-url="https://example.com/whatsapp-electron"
+url="https://github.com/shadyslim2018/whatsapp-electron"
 license=('MIT')
-depends=('electron' 'gtk3' 'nss' 'libxss' 'libnotify')  # system electron runtime + common deps
-makedepends=()  # if you keep extra npm deps, add: 'nodejs' 'npm'
+depends=('electron' 'gtk3' 'nss' 'libxss' 'libnotify' 'xdg-utils')  # xdg-open for external links
+makedepends=()
 source=(
   'main.js'
   'package.json'
@@ -17,21 +17,16 @@ source=(
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 build() {
-  # If your app has no runtime npm deps, nothing to do here.
-  # If you DO have deps (e.g., electron-auto-launch), uncomment:
-  # npm ci --omit=dev
+  # No build step needed (we use system Electron).
   :
 }
 
 package() {
   # App payload
   install -d "$pkgdir/usr/lib/whatsapp-electron"
-  install -m644 "$srcdir/main.js"        "$pkgdir/usr/lib/whatsapp-electron/"
-  install -m644 "$srcdir/package.json"   "$pkgdir/usr/lib/whatsapp-electron/"
-  install -m644 "$srcdir/icon.png"       "$pkgdir/usr/lib/whatsapp-electron/"
-
-  # If you installed node_modules in build(), ship them too:
-  # cp -a node_modules "$pkgdir/usr/lib/whatsapp-electron/"
+  install -m644 "$srcdir/main.js"      "$pkgdir/usr/lib/whatsapp-electron/main.js"
+  install -m644 "$srcdir/package.json" "$pkgdir/usr/lib/whatsapp-electron/package.json"
+  install -m644 "$srcdir/icon.png"     "$pkgdir/usr/lib/whatsapp-electron/icon.png"
 
   # Launcher
   install -d "$pkgdir/usr/bin"
@@ -45,4 +40,3 @@ package() {
   install -Dm644 "$srcdir/icon.png" \
     "$pkgdir/usr/share/icons/hicolor/256x256/apps/whatsapp-electron.png"
 }
-

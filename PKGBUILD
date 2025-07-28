@@ -1,6 +1,6 @@
 # Maintainer: AK <you@example.com>
 pkgname=whatsapp-electron
-pkgver=1.0.0
+pkgver=1.0.1
 pkgrel=1
 pkgdesc="Unofficial WhatsApp Web desktop wrapper (Electron) – runs with system Electron"
 arch=('x86_64')
@@ -10,7 +10,7 @@ depends=('electron' 'gtk3' 'nss' 'libxss' 'libnotify' 'xdg-utils')
 makedepends=()
 # Fetch the source from the tagged release tarball
 source=("https://github.com/shadyslim2018/whatsapp-electron/archive/refs/tags/v${pkgver}.tar.gz")
-sha256sums=('SKIP')  # replace with real sum via: updpkgsums
+sha256sums=('382eab6a76a0840a4a78a9d3b5d9adf9b43fe17928eb61e8ba2e94996eab3dc7')
 
 # The extracted folder will be: ${pkgname}-${pkgver}
 prepare() {

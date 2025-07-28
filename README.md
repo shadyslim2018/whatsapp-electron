@@ -40,7 +40,7 @@ whatsapp-electron
 
 ```bash
 sudo pacman -S --needed base-devel git electron
-git clone https://github.com/<yourname>/whatsapp-electron.git
+git clone https://github.com/shadyslim2018/whatsapp-electron.git
 cd whatsapp-electron/packaging/arch
 makepkg -si
 ```
@@ -56,7 +56,7 @@ whatsapp-electron
 
 ```bash
 sudo pacman -S electron
-git clone https://github.com/<yourname>/whatsapp-electron.git
+git clone https://github.com/shadyslim2018/whatsapp-electron.git
 cd whatsapp-electron
 /usr/bin/electron .
 ```

@@ -2,7 +2,6 @@ const { app, BrowserWindow, Menu, Tray, nativeImage, shell, globalShortcut, nati
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-// const AutoLaunch = require('electron-auto-launch'); // Uncomment to enable auto-launch
 
 let tray = null;
 let mainWindow = null;
@@ -10,14 +9,31 @@ let isQuiting = false;
 let alwaysOnTop = false;
 let darkCSSKey = null;
 
-// ======= ICON DETECTION =======
+// ------------------------
+// Single-instance lock
+// ------------------------
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
+// ------------------------
+// Icon detection (PNG first)
+// ------------------------
 const iconNames = [
-  'whatsapp', 'whatsappfordesktop', 'whatsapp-desktop', 
+  'whatsapp', 'whatsappfordesktop', 'whatsapp-desktop',
   'whatsapp-nativefier', 'whatsapp-web', 'whatsapp-for-linux',
   'whatsapp-msg', 'whatsapp-tray', 'whatsapp-logo'
 ];
-const exts = ['png', 'svg'];
-const sizes = ['16x16', '22x22', '24x24', '32x32', '48x48', 'scalable'];
+const sizes = ['16x16', '22x22', '24x24', '32x32', '48x48', '64x64', '128x128', '256x256', '512x512', 'scalable'];
 const subfolders = ['apps', 'panel', 'status', 'tray'];
 
 function getAllIconDirectories() {
@@ -29,71 +45,86 @@ function getAllIconDirectories() {
     '/usr/share/pixmaps',
     '/usr/local/share/icons'
   ];
-  baseDirs.forEach(dir => {
-    if (fs.existsSync(dir)) {
-      dirs.add(dir);
-      try {
-        fs.readdirSync(dir).forEach(theme => {
-          const themePath = path.join(dir, theme);
-          if (fs.statSync(themePath).isDirectory()) {
-            dirs.add(themePath);
-          }
-        });
-      } catch (e) {}
-    }
-  });
+  for (const dir of baseDirs) {
+    if (!fs.existsSync(dir)) continue;
+    dirs.add(dir);
+    try {
+      for (const entry of fs.readdirSync(dir)) {
+        const p = path.join(dir, entry);
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) dirs.add(p);
+      }
+    } catch {}
+  }
   return Array.from(dirs);
 }
 
 function findUsableIcon() {
-  const searchPatterns = [
+  const patterns = [
     { ext: 'png', size: '32x32', sub: 'apps' },
     { ext: 'png', size: '32x32', sub: 'tray' },
     { ext: 'png', size: '48x48', sub: 'apps' },
-    { ext: 'svg', size: 'scalable', sub: 'apps' },
-    { ext: 'png', size: '16x16', sub: 'panel' }
+    { ext: 'png', size: '24x24', sub: 'panel' },
+    { ext: 'svg', size: 'scalable', sub: 'apps' }
   ];
-  for (const pattern of searchPatterns) {
-    for (const themeDir of getAllIconDirectories()) {
+  for (const pattern of patterns) {
+    for (const dir of getAllIconDirectories()) {
       for (const name of iconNames) {
-        const candidate = path.join(
-          themeDir, 
-          pattern.size, 
-          pattern.sub, 
-          `${name}.${pattern.ext}`
-        );
+        const candidate = path.join(dir, pattern.size, pattern.sub, `${name}.${pattern.ext}`);
         if (fs.existsSync(candidate)) {
-          try {
-            const img = nativeImage.createFromPath(candidate);
-            if (!img.isEmpty()) {
-              return candidate;
-            }
-          } catch (e) {}
+          const img = nativeImage.createFromPath(candidate);
+          if (!img.isEmpty()) return candidate;
         }
       }
     }
   }
-  const fallback = path.join(__dirname, 'icon.png');
-  return fallback;
+  // fallback to bundled icon
+  return path.join(__dirname, 'icon.png');
 }
 
-// ======= TRAY MENU =======
+// ------------------------
+// Demand attention helper
+// ------------------------
+function demandAttention(win) {
+  try {
+    if (!win) return;
+    if (process.platform === 'darwin') {
+      if (typeof app.requestUserAttention === 'function') app.requestUserAttention(1);
+    } else {
+      if (typeof win.flashFrame === 'function') win.flashFrame(true);
+    }
+  } catch {}
+}
+
+// Stop flashing when focused
+app.on('browser-window-focus', (_event, win) => {
+  try {
+    if (win && typeof win.flashFrame === 'function') win.flashFrame(false);
+  } catch {}
+});
+
+// ------------------------
+// Tray
+// ------------------------
 function setupTray() {
   const iconPath = findUsableIcon();
   try {
     let image = nativeImage.createFromPath(iconPath);
-    if (image.getSize().width > 24 || image.getSize().height > 24) {
-      image = image.resize({ width: 24, height: 24 });
-    }
+    const { width, height } = image.getSize();
+    if (width > 24 || height > 24) image = image.resize({ width: 24, height: 24 });
+
     tray = new Tray(image);
     tray.setToolTip('WhatsApp');
 
     const contextMenu = Menu.buildFromTemplate([
-      { label: 'Show', click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); }} },
+      { label: 'Show', click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } } },
       { label: 'Reload', click: () => { if (mainWindow) mainWindow.reload(); } },
       { label: 'Dark Mode', click: () => setDarkMode(true) },
-      { label: 'Always On Top', type: 'checkbox', checked: alwaysOnTop, 
-        click: (menuItem) => { alwaysOnTop = menuItem.checked; if (mainWindow) mainWindow.setAlwaysOnTop(alwaysOnTop); } },
+      {
+        label: 'Always On Top',
+        type: 'checkbox',
+        checked: alwaysOnTop,
+        click: (mi) => { alwaysOnTop = mi.checked; if (mainWindow) mainWindow.setAlwaysOnTop(alwaysOnTop); }
+      },
       { type: 'separator' },
       { label: 'Quit', click: () => { isQuiting = true; app.quit(); } }
     ]);
@@ -103,13 +134,15 @@ function setupTray() {
       if (!mainWindow) createWindow();
       else { mainWindow.show(); mainWindow.focus(); }
     });
-  } catch (err) {
+  } catch {
     tray = new Tray(nativeImage.createEmpty());
     tray.setToolTip('WhatsApp');
   }
 }
 
-// ======= WINDOW MANAGEMENT =======
+// ------------------------
+// Window
+// ------------------------
 function createWindow() {
   if (mainWindow) {
     mainWindow.show();
@@ -122,7 +155,8 @@ function createWindow() {
     width: 1100,
     height: 800,
     icon: iconPath,
-    alwaysOnTop: alwaysOnTop,
+    show: true,
+    alwaysOnTop,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -131,45 +165,51 @@ function createWindow() {
     }
   });
 
+  // Spoof UA to avoid WhatsApp "update Chrome" nags
   mainWindow.webContents.setUserAgent(
     'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.78 Safari/537.36'
   );
   mainWindow.loadURL('https://web.whatsapp.com/');
 
-  // Handle notifications
-  mainWindow.webContents.session.setPermissionRequestHandler((_, permission, callback) => {
-    callback(permission === 'notifications');
+  // Notifications: allow
+  mainWindow.webContents.session.setPermissionRequestHandler((_, permission, cb) => {
+    cb(permission === 'notifications');
   });
 
-  // Spellcheck context menu
-  mainWindow.webContents.on('context-menu', (_, params) => {
+  // Spellcheck menu + suggestions
+  mainWindow.webContents.on('context-menu', (_e, params) => {
+    const langs = mainWindow.webContents.session.getSpellCheckerLanguages();
     const menu = Menu.buildFromTemplate([
       {
         label: 'Spellcheck Language',
         submenu: [
-          { label: 'English (UK)', type: 'radio', checked: true, click: () => mainWindow.webContents.session.setSpellCheckerLanguages(['en-GB']) },
-          { label: 'English (US)', type: 'radio', click: () => mainWindow.webContents.session.setSpellCheckerLanguages(['en-US']) },
-          { label: 'French', type: 'radio', click: () => mainWindow.webContents.session.setSpellCheckerLanguages(['fr-FR']) }
+          { label: 'English (UK)', type: 'radio', checked: langs.includes('en-GB'),
+            click: () => mainWindow.webContents.session.setSpellCheckerLanguages(['en-GB']) },
+          { label: 'English (US)', type: 'radio', checked: langs.includes('en-US'),
+            click: () => mainWindow.webContents.session.setSpellCheckerLanguages(['en-US']) },
+          { label: 'French', type: 'radio', checked: langs.includes('fr-FR'),
+            click: () => mainWindow.webContents.session.setSpellCheckerLanguages(['fr-FR']) }
         ]
       },
-      ...(params.misspelledWord ? 
-        params.dictionarySuggestions.map(s => ({
-          label: s,
-          click: () => mainWindow.webContents.replaceMisspelling(s)
-        })) : []),
+      ...(params.misspelledWord
+        ? params.dictionarySuggestions.map(s => ({
+            label: s,
+            click: () => mainWindow.webContents.replaceMisspelling(s)
+          }))
+        : []),
       { type: 'separator' },
       { role: 'copy' },
-      { role: 'paste' }
+      { role: 'paste' },
+      { role: 'selectAll' }
     ]);
     menu.popup();
   });
 
-  // External links open in system browser
+  // External links → default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
   });
-
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (url !== mainWindow.webContents.getURL()) {
       event.preventDefault();
@@ -177,7 +217,7 @@ function createWindow() {
     }
   });
 
-  // Minimize to tray instead of close
+  // Minimize to tray on close
   mainWindow.on('close', (event) => {
     if (!isQuiting) {
       event.preventDefault();
@@ -185,61 +225,64 @@ function createWindow() {
     }
   });
 
-  // Unread badge count (taskbar/dock)
-  mainWindow.webContents.on('page-title-updated', (event, title) => {
-    const matches = title.match(/\((\d+)\)/);
-    if (matches) {
-      app.setBadgeCount(parseInt(matches[1], 10));
-      // Flash/demand attention for unread if not focused
+  // Unread badge + demand attention (fixed for Linux)
+  mainWindow.webContents.on('page-title-updated', (_event, title) => {
+    const m = title && title.match(/\((\d+)\)/);
+    if (m) {
+      app.setBadgeCount(parseInt(m[1], 10));
       if (!mainWindow.isFocused() || mainWindow.isMinimized()) {
-        mainWindow.requestUserAttention(2);
+        demandAttention(mainWindow);
       }
     } else {
       app.setBadgeCount(0);
+      if (typeof mainWindow.flashFrame === 'function') mainWindow.flashFrame(false);
     }
   });
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
-
+  mainWindow.on('closed', () => { mainWindow = null; });
   return mainWindow;
 }
 
-// ======= DARK MODE TOGGLE =======
+// ------------------------
+// Dark mode toggle
+// ------------------------
 function setDarkMode(enable) {
-  if (mainWindow) {
-    // Remove existing dark mode CSS if present
-    if (darkCSSKey) {
-      mainWindow.webContents.removeInsertedCSS(darkCSSKey);
-      darkCSSKey = null;
-    }
-    if (enable) {
-      mainWindow.webContents.insertCSS(`
-        html, body { filter: invert(1) hue-rotate(180deg) !important; background: #222 !important; color: #fff !important; }
-        img, video { filter: invert(1) hue-rotate(180deg) !important; }
-      `).then(key => { darkCSSKey = key; });
-    }
+  if (!mainWindow) return;
+  if (darkCSSKey) {
+    mainWindow.webContents.removeInsertedCSS(darkCSSKey);
+    darkCSSKey = null;
+  }
+  if (enable) {
+    mainWindow.webContents.insertCSS(`
+      html, body { filter: invert(1) hue-rotate(180deg) !important; background: #222 !important; color: #fff !important; }
+      img, video { filter: invert(1) hue-rotate(180deg) !important; }
+    `).then(key => { darkCSSKey = key; });
   }
 }
 
-// ======= APPLICATION MENU =======
+// Follow system theme (optional)
+nativeTheme.on('updated', () => {
+  if (!mainWindow) return;
+  if (nativeTheme.shouldUseDarkColors) setDarkMode(true);
+  else setDarkMode(false);
+});
+
+// ------------------------
+// App menu
+// ------------------------
 function createAppMenu() {
   const template = [
     {
       label: 'View',
       submenu: [
-        { 
-          label: 'Dark Mode', 
-          click: () => setDarkMode(true)
-        },
-        { 
-          label: 'Light Mode', 
-          click: () => setDarkMode(false)
-        },
+        { label: 'Dark Mode', click: () => setDarkMode(true) },
+        { label: 'Light Mode', click: () => setDarkMode(false) },
         { type: 'separator' },
-        { label: 'Always On Top', type: 'checkbox', checked: alwaysOnTop,
-          click: menuItem => { alwaysOnTop = menuItem.checked; if (mainWindow) mainWindow.setAlwaysOnTop(alwaysOnTop); }
+        {
+          label: 'Always On Top',
+          type: 'checkbox',
+          checked: alwaysOnTop,
+          click: (mi) => { alwaysOnTop = mi.checked; if (mainWindow) mainWindow.setAlwaysOnTop(alwaysOnTop); }
         },
         { type: 'separator' },
         { role: 'reload' },
@@ -255,32 +298,19 @@ function createAppMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-// ======= GLOBAL SHORTCUT =======
+// ------------------------
+// Global shortcuts
+// ------------------------
 function setupShortcuts() {
   globalShortcut.register('Control+Alt+W', () => {
-    if (mainWindow) {
-      mainWindow.show();
-      mainWindow.focus();
-    } else {
-      createWindow();
-    }
+    if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
+    else createWindow();
   });
 }
 
-// ======= AUTO-START (Plasma recommends GUI) =======
-// // Enable this block if you want automatic startup (Plasma's Autostart GUI is preferred).
-// const autoLauncher = new AutoLaunch({ name: 'WhatsApp' });
-// autoLauncher.isEnabled().then((isEnabled) => { if (!isEnabled) autoLauncher.enable(); });
-
-// ======= SYSTEM THEME REACTION =======
-nativeTheme.on('updated', () => {
-  if (mainWindow) {
-    if (nativeTheme.shouldUseDarkColors) setDarkMode(true);
-    else setDarkMode(false);
-  }
-});
-
-// ======= APP LIFECYCLE =======
+// ------------------------
+// Lifecycle
+// ------------------------
 app.whenReady().then(() => {
   createWindow();
   createAppMenu();
@@ -288,20 +318,14 @@ app.whenReady().then(() => {
   setupShortcuts();
 
   app.on('activate', () => {
-    if (!mainWindow) {
-      createWindow();
-    }
+    if (!mainWindow) createWindow();
   });
 });
 
-app.on('before-quit', () => isQuiting = true);
-
+app.on('before-quit', () => { isQuiting = true; });
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  if (process.platform !== 'darwin') app.quit();
 });
-
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });

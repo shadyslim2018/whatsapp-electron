@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=WhatsApp
+Comment=WhatsApp Web desktop wrapper
+Exec=whatsapp-electron %u
+Icon=whatsapp-electron
+Terminal=false
+Type=Application
+Categories=Network;Chat;InstantMessaging;
+StartupWMClass=WhatsApp
+SingleMainWindow=true

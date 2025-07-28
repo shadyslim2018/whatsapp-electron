@@ -1,0 +1,30 @@
+{
+  "name": "whatsapp",
+  "version": "1.0.0",
+  "description": "WhatsApp",
+  "main": "main.js",
+  "author": "AK",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "electron-auto-launch": "^5.0.7"
+  },
+  "devDependencies": {
+    "electron": "^27.3.11",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.ak.whatsapp",
+    "productName": "WhatsApp",
+    "files": [
+      "**/*"
+    ],
+    "linux": {
+      "target": "AppImage",
+      "icon": "icon.png",
+      "category": "Network"
+    }
+  }
+}

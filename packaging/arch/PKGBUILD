@@ -6,37 +6,43 @@ pkgdesc="Unofficial WhatsApp Web desktop wrapper (Electron) – runs with system
 arch=('x86_64')
 url="https://github.com/shadyslim2018/whatsapp-electron"
 license=('MIT')
-depends=('electron' 'gtk3' 'nss' 'libxss' 'libnotify' 'xdg-utils')  # xdg-open for external links
+depends=('electron' 'gtk3' 'nss' 'libxss' 'libnotify' 'xdg-utils')
 makedepends=()
-source=(
-  'main.js'
-  'package.json'
-  'icon.png'
-  'whatsapp-electron.desktop'
-)
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+# Fetch the source from the tagged release tarball
+source=("https://github.com/shadyslim2018/whatsapp-electron/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('SKIP')  # replace with real sum via: updpkgsums
+
+# The extracted folder will be: ${pkgname}-${pkgver}
+prepare() {
+  cd "${srcdir}/${pkgname}-${pkgver}"
+  # sanity check (optional)
+  [[ -f main.js && -f package.json && -f icon.png && -f desktop/whatsapp-electron.desktop ]] || {
+    echo "Required files not found in source tree"; exit 1;
+  }
+}
 
 build() {
-  # No build step needed (we use system Electron).
-  :
+  : # nothing to build (uses system Electron)
 }
 
 package() {
+  cd "${srcdir}/${pkgname}-${pkgver}"
+
   # App payload
-  install -d "$pkgdir/usr/lib/whatsapp-electron"
-  install -m644 "$srcdir/main.js"      "$pkgdir/usr/lib/whatsapp-electron/main.js"
-  install -m644 "$srcdir/package.json" "$pkgdir/usr/lib/whatsapp-electron/package.json"
-  install -m644 "$srcdir/icon.png"     "$pkgdir/usr/lib/whatsapp-electron/icon.png"
+  install -d "${pkgdir}/usr/lib/${pkgname}"
+  install -m644 main.js        "${pkgdir}/usr/lib/${pkgname}/main.js"
+  install -m644 package.json   "${pkgdir}/usr/lib/${pkgname}/package.json"
+  install -m644 icon.png       "${pkgdir}/usr/lib/${pkgname}/icon.png"
 
   # Launcher
-  install -d "$pkgdir/usr/bin"
-  printf '#!/bin/sh\nexec /usr/bin/electron /usr/lib/whatsapp-electron "$@"\n' \
-    > "$pkgdir/usr/bin/whatsapp-electron"
-  chmod 755 "$pkgdir/usr/bin/whatsapp-electron"
+  install -d "${pkgdir}/usr/bin"
+  printf '#!/bin/sh\nexec /usr/bin/electron /usr/lib/%s "$@"\n' "${pkgname}" \
+    > "${pkgdir}/usr/bin/${pkgname}"
+  chmod 755 "${pkgdir}/usr/bin/${pkgname}"
 
   # Desktop entry + menu icon
-  install -Dm644 "$srcdir/whatsapp-electron.desktop" \
-    "$pkgdir/usr/share/applications/whatsapp-electron.desktop"
-  install -Dm644 "$srcdir/icon.png" \
-    "$pkgdir/usr/share/icons/hicolor/256x256/apps/whatsapp-electron.png"
+  install -Dm644 desktop/whatsapp-electron.desktop \
+    "${pkgdir}/usr/share/applications/whatsapp-electron.desktop"
+  install -Dm644 icon.png \
+    "${pkgdir}/usr/share/icons/hicolor/256x256/apps/whatsapp-electron.png"
 }
